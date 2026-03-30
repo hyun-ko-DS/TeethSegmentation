@@ -1,3 +1,13 @@
+import torch
+
+from ultralytics import YOLO
+import ultralytics.nn.tasks
+from ultralytics.nn.modules import Conv, C3k2, SPPF, C2PSA, Segment, Concat
+from ultralytics.utils import loss
+from ultralytics.utils.metrics import bbox_iou
+from ultralytics.utils.ops import make_divisible
+import ultralytics.utils.metrics as metrics
+
 def calculate_nwd(bz1, bz2, constant=12.8):
     """Normalized Gaussian Wasserstein Distance 계산"""
     d2 = (bz1[..., 0] - bz2[..., 0])**2 + (bz1[..., 1] - bz2[..., 1])**2
@@ -31,9 +41,14 @@ def nwd_iou_loss_patch(box1, box2, **kwargs):
         nwd = nwd.unsqueeze(-1)
 
     # 4. 하이브리드 결합
-    alpha = 0.6
+    alpha = config['nwd_alpha']
     return alpha * nwd + (1 - alpha) * iou
 
+def load_config(config_path="config.json"):
+    path = Path(config_path)
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+config = load_config()
 
 if not hasattr(loss, 'original_bbox_iou'):
     loss.original_bbox_iou = loss.bbox_iou

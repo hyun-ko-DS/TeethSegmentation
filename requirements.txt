@@ -1,3 +1,6 @@
-decord
+-e git+https://github.com/facebookresearch/sam3.git#egg=sam3
+# decord: PyPI has no wheels for macOS; on Apple Silicon use: conda install -c conda-forge decord
+decord; sys_platform != "darwin"
 timm
-sam3 @ git+https://github.com/facebookresearch/sam3.git
+wandb
+python-dotenv

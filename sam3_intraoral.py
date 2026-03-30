@@ -6,13 +6,13 @@ from sam3.model_builder import build_sam3_image_model
 from sam3.model.sam3_image_processor import Sam3Processor
 
 
-def run_intraoral_crop_pipeline(split_name, processor_model, BASE_OUTPUT_DIR = '/data/alphadent_intraoral',
+def run_intraoral_crop_pipeline(split_name, processor_model, BASE_OUTPUT_DIR = '/data/alphadent_roi',
                                 margin_ratio = config['margin_ratio'], 
                                 prompt = config['intraoral_prompt']):
     print(f"🚀 [{split_name.upper()}] 구강 영역 통합 크롭 시작 (Margin: {margin_ratio})")
 
-    source_img_dir = f"/data/AlphaDent_extracted/images/{split_name}"
-    source_lbl_dir = f"/data/AlphaDent_extracted/labels/{split_name}"
+    source_img_dir = f"/data/alphadent_extracted/images/{split_name}"
+    source_lbl_dir = f"/data/alphadent_extracted/labels/{split_name}"
 
     image_files = sorted(glob.glob(os.path.join(source_img_dir, "*.jpg")) +
                          glob.glob(os.path.join(source_img_dir, "*.png")))

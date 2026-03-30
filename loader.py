@@ -4,15 +4,15 @@ from huggingface_hub import login
 import os
 from pathlib import Path
 import shutil
+import wandb
 import zipfile
 
-def run_loading_pipeline(
-):
+def run_loading_pipeline(login_wandb=False):
     if login_wandb:
         load_dotenv(".env")
         hf_key = os.getenv("HUGGINGFACE_API_KEY")
-        if wandb_key:
-            login(token=hf_token)
+        if hf_key:
+            login(token=hf_key)
             print("Hugging Face logged in successfully")
         else:
             print("HUGGINGFACE_API_KEY not found. Skipping hugging face login.")
@@ -39,14 +39,17 @@ def run_loading_pipeline(
     else:
         raise FileNotFoundError("ZIP file not found")
 
-    # 압축 해제
-    extract_dir = '/data/AlphaDent_extracted'
+    extract_dir = Path(__file__).resolve().parent / "data" / "alphadent_extracted"
+    need_extract = not extract_dir.exists() or not any(extract_dir.iterdir())
 
-    if not os.path.exists(extract_dir):
+    if need_extract:
+        extract_dir.mkdir(parents=True, exist_ok=True)
         print(f"\nExtracting to {extract_dir}...")
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(extract_dir)
         print("Extraction completed")
     else:
         print(f"\nDataset already extracted at {extract_dir}")
-    return extract_dir
+    return str(extract_dir)
+
+run_loading_pipeline()
