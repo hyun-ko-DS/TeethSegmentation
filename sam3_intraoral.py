@@ -123,6 +123,7 @@ def run_intraoral_crop_pipeline(split_name, processor_model, BASE_OUTPUT_DIR = '
     print(f"✅ {split_name.upper()} 완료! 처리된 이미지: {total_images}")
 
 
+
 # 현재 위치 확인
 print(f"현재 디렉토리: {os.getcwd()}")
 

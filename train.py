@@ -1,12 +1,3 @@
-from collections import defaultdict
-import cv2
-from datetime import datetime
-import glob
-import json
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import numpy as np
-import time
 import pandas as pd
 from pathlib import Path
 from PIL import Image
@@ -15,9 +6,6 @@ import shutil
 from typing import List, Dict
 from tqdm import tqdm
 from tqdm.auto import tqdm
-import warnings
-warnings.filterwarnings('ignore')
-import zipfile
 
 import albumentations as A
 import torch

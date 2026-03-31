@@ -48,11 +48,5 @@ def load_config(config_path="config.json"):
     path = Path(config_path)
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
+
 config = load_config()
-
-if not hasattr(loss, 'original_bbox_iou'):
-    loss.original_bbox_iou = loss.bbox_iou
-
-# 패치 적용
-loss.bbox_iou = nwd_iou_loss_patch
-print("✅ NWD Loss 패치가 수정되어 성공적으로 주입되었습니다.")

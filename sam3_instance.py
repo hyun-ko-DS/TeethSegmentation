@@ -5,9 +5,7 @@ from PIL import Image
 from sam3.model_builder import build_sam3_image_model
 from sam3.model.sam3_image_processor import Sam3Processor
  
-# =========================================================
-# 2. V5 통합 전처리 함수 (Train/Valid/Test 공용)
-# =========================================================
+ 
 def run_instance_crop_pipeline(split_name, processor_model, BASE_OUTPUT_DIR = '/data/alphadent_instance',
                                 margin_ratio = config['margin_ratio'], 
                                 prompt = config['instance_prompt']):
