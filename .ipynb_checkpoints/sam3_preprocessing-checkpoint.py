@@ -171,6 +171,13 @@ def run_sam3_preprocessing(split_name, processor_model, is_instance, config):
 
     print(f"✅ {split_name.upper()} 완료! ({mode_str} 총합: {total_count})")
 
+def extract_with_progress(zip_path, extract_dir):
+    """zip 파일을 tqdm 프로그레스 바와 함께 압축 해제 (NameError 해결)"""
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        files = zip_ref.namelist()
+        for file in tqdm(files, desc=f"📦 Extracting {os.path.basename(zip_path)}", unit="file", leave=False):
+            zip_ref.extract(file, extract_dir)
+
 def prepare_directories():
     """기존의 불완전한 폴더를 삭제하고 새 구조를 만듭니다."""
     base_data_dir = "./data"
@@ -193,7 +200,7 @@ def prepare_directories():
 
 def download_all_from_drive():
     """구글 드라이브에서 다운로드 후 tqdm 바와 함께 압축 해제"""
-    prepare_directories(force_delete=True)
+    prepare_directories()
 
     files = {
         "alphadent_roi.zip": ("1ZQCzfbQF0uPXtSz_-NHBYnArZoRei-IF", "./data/alphadent_roi"),
@@ -237,7 +244,7 @@ def main():
         return # 전처리 로직 실행 안 하고 종료
 
     # 2. 일반 전처리 모드 (기존 데이터를 지우지 않고 필요한 폴더만 생성)
-    prepare_directories(force_delete=False)
+    prepare_directories()
 
     # 2. 실행 환경 준비
     load_dotenv()
