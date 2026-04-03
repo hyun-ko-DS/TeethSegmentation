@@ -1,0 +1,84 @@
+{
+    "margin_ratio": 0.15,
+    "iou_filter_th": 0.45,
+    "sam_threshold": 0.5,
+    "intraoral_prompt": "The complete intraoral area including all teeth and gingiva",
+    "instance_prompt": "teeth",
+
+    "data": "/content/alphadent.yaml",
+    "device": 0,
+    "workers": 8,
+    "project": "runs",
+    "name": "exp",
+    "exist_ok": true,
+    "seed": 42,
+    "amp": true,
+
+    "epochs": 200,
+    "patience": 20,
+
+    "optimizer": "AdamW",
+    "lr0": 1e-4,
+    "lrf": 0.01,
+    "momentum": 0.9,
+    "weight_decay": 0.0005,
+    "warmup_epochs": 5.0,
+    "cos_lr": true,
+
+    "hsv_h": 0.015,
+    "hsv_s": 0.4,
+    "hsv_v": 0.4,
+    "degrees": 10.0,
+    "translate": 0.01,
+    "scale": 0.2,
+    "fliplr": 0.5,
+    "roi_365_355_flipud": 0.15,
+    "roi_357_flipud": 0.2,
+    "instance_flipud": 0,
+    "mosaic": 0.0,
+    "mixup": 0.0,
+    "copy_paste": 0,
+    "close_mosaic": 10,
+
+    "overlap_mask": true,
+    "retina_masks": true,
+    "mask_ratio": 2,
+    "box": 7.5,
+    "cls": 1.5,
+    "dfl": 1.5,
+    "val": true,
+    "plots": true,
+
+    "roi_image_size": 1536,
+    "instance_image_size": 768,
+    "roi_batch_size": 6,
+    "instance_batch_size": 40,
+
+    "conf_thres": 0.01,
+    "iou_thres": 0.45,
+    "caf_alpha": 0.5,
+    "caf_dilation_rates": [2, 3],
+
+    "nwd_alpha": 0.6,
+
+    "canvas_w": 1536,
+    "canvas_h": 1536,
+    "wmf_iou_thres": 0.25,
+    "wmf_mask_thres": 0.35,
+    "wmf_weights": [0.25, 0.25, 0.25, 0.25],
+    "wmf_single_model_thres": 0.9,
+    "wmf_agreement_boost_thr": 0.5,
+
+    "colors": [
+        [0.0, 1.0, 1.0],  
+        [0.0, 0.0, 1.0],  
+        [0.5, 0.0, 0.5],  
+    
+        [1.0, 1.0, 0.0],  
+        [1.0, 0.5, 0.0], 
+        [1.0, 0.0, 0.0], 
+        [1.0, 0.0, 1.0], 
+        [0.0, 1.0, 0.0],  
+        [0.6, 0.3, 0.1]
+    ]
+}

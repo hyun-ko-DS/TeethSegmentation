@@ -1,4 +1,7 @@
 config.json
 .env
-/data
-/src
+data/
+src/
+alphadent_yolo/
+__pycache__/
+*.zip

@@ -26,8 +26,11 @@ import ultralytics.utils.metrics as metrics
 from loss import *
 from caf import *
 
+
+
 if not hasattr(loss, 'original_bbox_iou'):
     loss.original_bbox_iou = loss.bbox_iou
+
 # 패치 적용
 loss.bbox_iou = nwd_iou_loss_patch
 print("✅ NWD Loss 패치가 수정되어 성공적으로 주입되었습니다.")
