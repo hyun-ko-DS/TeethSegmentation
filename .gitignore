@@ -1,8 +1,8 @@
-config.json
-.env
+*.json
+*.yaml
 data/
-src/
-alphadent_yolo/
-__pycache__/
-*.zip
+models/
+.ipynb_checkpoints/
 etc.ipynb
+*.zip
+.env
