@@ -4,3 +4,7 @@ models/**/*.pt
 etc.ipynb
 *.zip
 .env
+config.json
+__pycache__
+.ipynb_checkpoints
+src/
