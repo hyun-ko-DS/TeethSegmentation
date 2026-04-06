@@ -1,5 +1,3 @@
-*.json
-*.yaml
 data/
 models/**/*.pt
 .ipynb_checkpoints/

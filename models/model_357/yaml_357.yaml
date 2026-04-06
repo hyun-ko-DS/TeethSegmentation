@@ -1,0 +1,15 @@
+path: /data/alphadent_roi
+train: images/train
+val: images/valid
+test: images/test
+nc: 9
+names:
+  0: Abrasion
+  1: Filling
+  2: Crown
+  3: Caries Class 1
+  4: Caries Class 2
+  5: Caries Class 3
+  6: Caries Class 4
+  7: Caries Class 5
+  8: Caries Class 6
