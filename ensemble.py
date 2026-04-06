@@ -7,6 +7,8 @@ import os
 import pandas as pd
 from tqdm import tqdm
 
+from utils import *
+
 # ============================================================
 # 1. Configuration Class
 # ============================================================
@@ -285,6 +287,8 @@ def main():
     models = [model_365, model_360, model_357, model_355]
     is_roi_list = [True, False, True, True]
     paths_list = [paths_roi, paths_instance, paths_roi, paths_roi]
+
+    config = load_config("config.json")
 
     run_wmf_ensemble(
         models=models,
