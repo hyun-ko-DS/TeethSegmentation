@@ -1,56 +1,35 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
 class CAFBlock(nn.Module):
+    # Default class labels
+    runtime_alpha = 0.5
+    runtime_dilation_rates = (2, 3)
+
     def __init__(self, c):
         super().__init__()
-        # 1. 정규화 및 모듈 정의
+        alpha = CAFBlock.runtime_alpha
+        dilations = CAFBlock.runtime_dilation_rates
+
+        # 1) Initialize modules
         self.ln1 = nn.LayerNorm(c)
         self.acfm = ACFM(c)
         self.ln2 = nn.LayerNorm(c)
-        self.msnn = MSNN(c)
+        self.msnn = MSNN(c, dilation_rates=dilations)
 
-        # --------------------------------------------------
-        # 🏆 Learnable Scaling Parameters (Inception-ResNet 스타일)
-        # - 초기값은 논문에서 추천하는 안정적인 수치인 0.1로 설정합니다.
-        # - nn.Parameter로 선언해야 Optimizer가 이 값을 업데이트합니다.
-        # --------------------------------------------------
-        self.alpha1 = nn.Parameter(torch.full((1,), 0.5)) # ACFM용 계수
-        self.alpha2 = nn.Parameter(torch.full((1,), 0.5)) # MSNN용 계수
+        # 2) Learnable parameters initialized with the configured alpha
+        self.alpha1 = nn.Parameter(torch.full((1,), float(alpha)))
+        self.alpha2 = nn.Parameter(torch.full((1,), float(alpha)))
 
     def forward(self, x):
-        # ==================================================
-        # 1️⃣ ACFM 단계 (Weighted Residual)
-        # ==================================================
-        b, c, h, w = x.shape
+        # ACFM stage
         x_ln = x.permute(0, 2, 3, 1)
-
-        # 공식: x = x + (alpha * Module(x))
-        # alpha1이 커질수록 ACFM의 채널 어텐션 정보가 강하게 반영됩니다.
         x = x + (self.alpha1 * self.acfm(self.ln1(x_ln).permute(0, 3, 1, 2)))
 
-        # ==================================================
-        # 2️⃣ MSNN 단계 (Weighted Residual)
-        # ==================================================
+        # MSNN stage
         x_ln = x.permute(0, 2, 3, 1)
-
-        # alpha2가 커질수록 MSNN의 멀티스케일 공간 정보가 강하게 반영됩니다.
         x = x + (self.alpha2 * self.msnn(self.ln2(x_ln).permute(0, 3, 1, 2)))
-
-        return x
-
-class ChannelShuffle(nn.Module):
-    def __init__(self, groups: int):
-        super().__init__()
-        # 채널을 몇 개 그룹으로 나눌지 설정
-        # 예) C = 512, groups = 4 => 각 그룹당 128채널
-        self.groups = groups
-
-    def forward(self, x):
-        # x: (B, C, H, W)
-        b, c, h, w = x.size()
-        assert c % self.groups == 0, "channels must be divisible by groups"
-
-        x = x.view(b, self.groups, c // self.groups, h, w)
-        x = x.transpose(1, 2).contiguous()
-        x = x.view(b, c, h, w)
         return x
 
 class ACFM(nn.Module):
@@ -64,13 +43,13 @@ class ACFM(nn.Module):
 
         # ---------- Local branch ----------
 
-        # 출력 채널은 각 입력 채널들의 정보를 섞어주는 weighted sum
+        # 1x1 conv mixes channel information as weighted sums.
         self.local_conv1 = nn.Conv2d(c, c, kernel_size=1, bias=False)
 
-        # 채널들을 무작위가 아닌, 규칙적으로 섞어주어 서로 다른 채널 그룹 간의 정보 교류 강제
+        # Deterministic channel shuffle enforces cross-group interaction.
         self.shuffle = ChannelShuffle(shuffle_groups)
 
-        # 3 x 3 Depthwise Conv = 일반 Conv보다는 연산량은 적으면서 공간 특징 추출
+        # 3x3 depthwise conv captures spatial features efficiently.
         self.local_dwconv = nn.Conv2d(
             c, c, kernel_size=3, padding=1, groups=c, bias=False
         )
@@ -127,15 +106,15 @@ class MSNN(nn.Module):
         super().__init__()
         d1, d2 = dilation_rates
 
-        # shared channel alignment
+        # Shared channel alignment.
         self.conv1 = nn.Conv2d(c, c, kernel_size=1, bias=False)
 
-        # local path
+        # Local path.
         self.local_dwconv = nn.Conv2d(
             c, c, kernel_size=3, padding=1, groups=c, bias=False
         )
 
-        # global path (dilated convs)
+        # Global path (dilated convolutions).
         self.dilated_conv1 = nn.Conv2d(
             c, c, kernel_size=3, padding=d1, dilation=d1, bias=False
         )
@@ -149,15 +128,14 @@ class MSNN(nn.Module):
     def forward(self, x):
         x = self.conv1(x)
 
-        # local branch
+        # Local branch.
         local_feat = self.local_dwconv(x)
         local_feat = self.act(local_feat)
 
-        # global branch
+        # Global branch.
         global_feat = self.dilated_conv1(x) + self.dilated_conv2(x)
 
-        # gating
+        # Gating.
         out = local_feat * global_feat
         out = self.proj(out)
-
         return out

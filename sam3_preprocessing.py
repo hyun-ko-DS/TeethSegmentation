@@ -17,50 +17,49 @@ import zipfile
 
 from utils import *
 
-
 def run_sam3_preprocessing(split_name, processor_model, is_instance, config):
     """
-    is_instance=True : 개별 치아 인스턴스 크롭 (알파덴트 인스턴스 버전)
-    is_instance=False: 구강 영역 전체 ROI 크롭 (알파덴트 ROI 버전)
+    is_instance=True : Crop individual tooth instances (Alphadent Instance version)
+    is_instance=False: Crop the entire oral region ROI (Alphadent ROI version)
     """
-    # 1. 설정 및 경로 초기화
-    # 인스턴스 크롭 / ROI 구강영역 크롭으로 구분
+    # 1. Configuration and Path Initialization
+    # Distinguish between Instance crop and ROI oral region crop
     mode_str = "INSTANCE" if is_instance else "ROI"
-    # 경로 구분
-    base_output_dir = "./data/alphadent_instance" if is_instance else "./data/alphadent_roi" 
-    # 크롭 방식에 따른 SAM-3 프롬프트 구분
-    prompt = "teeth" if is_instance else  "The complete intraoral area including all teeth and gingiva"
-    margin_ratio = 0.15 # 두 방식 모두 상하좌우 15% 마진 두어 크롭
     
-    print(f"🚀 [{split_name.upper()}] {mode_str} 전처리 시작 (Prompt: {prompt})")
+    # Path configuration
+    base_output_dir = "./data/alphadent_instance" if is_instance else "./data/alphadent_roi" 
+    
+    # SAM-3 prompt differentiation based on crop mode
+    prompt = "teeth" if is_instance else "The complete intraoral area including all teeth and gingiva"
+    margin_ratio = 0.15 # Apply 15% margin on all sides for both modes
+    
+    print(f"🚀 [{split_name.upper()}] Starting {mode_str} Preprocessing (Prompt: {prompt})")
 
-    # loader.py 를 통해 받은 원본 이미지와 라벨 경로
+    # Source image and label paths (extracted via loader.py)
     source_img_dir = f"data/alphadent_extracted/images/{split_name}"
     source_lbl_dir = f"data/alphadent_extracted/labels/{split_name}"
-
-    # 출력 경로
-    base_output_dir = "data/alphadent_instance" if is_instance else "data/alphadent_roi"
 
     image_files = sorted(glob.glob(os.path.join(source_img_dir, "*.jpg")) +
                          glob.glob(os.path.join(source_img_dir, "*.png")))
 
+    # Create directory structure
     for sub in ["images", "labels", "metadata"]:
         os.makedirs(os.path.join(base_output_dir, sub, split_name), exist_ok=True)
 
     total_count = 0
 
-    # 2. 이미지 루프 시작
+    # 2. Start Image Processing Loop
     for img_path in tqdm(image_files, desc=f"Processing {split_name}"):
         file_base = os.path.splitext(os.path.basename(img_path))[0]
 
-        # [공통] 이미지 로드 및 리사이즈
+        # [Common] Load and resize image
         raw_image = Image.open(img_path).convert("RGB")
         raw_image.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
         img_np = np.array(raw_image)
         img_h, img_w = img_np.shape[:2]
 
-        # [공통] SAM-3 추론
-        # inference_mode와 autocast를 중첩해서 사용.
+        # [Common] SAM-3 Inference
+        # Use inference_mode and autocast for optimized performance
         with torch.inference_mode(), torch.amp.autocast("cuda"):
             inference_state = processor_model.set_image(raw_image)
             output = processor_model.set_text_prompt(state=inference_state, prompt=prompt)
@@ -68,10 +67,10 @@ def run_sam3_preprocessing(split_name, processor_model, is_instance, config):
         scores = output["scores"]
 
         if len(masks) == 0:
-            print(f"⚠️ {file_base}: 탐지 실패. 스킵합니다.")
+            print(f"⚠️ {file_base}: Detection failed. Skipping.")
             continue
 
-        # [공통] 원본 라벨 로드 (Train/Valid 전용)
+        # [Common] Load source labels (Train/Valid only)
         raw_lines = []
         lbl_path = os.path.join(source_lbl_dir, file_base + ".txt")
         if split_name != "test" and os.path.exists(lbl_path):
@@ -81,16 +80,16 @@ def run_sam3_preprocessing(split_name, processor_model, is_instance, config):
         metadata_list = []
 
         # ---------------------------------------------------------
-        # 3. 분기 로직: 마스크 처리 및 크롭
+        # 3. Branching Logic: Mask Processing and Cropping
         # ---------------------------------------------------------
         
-        # 처리할 마스크 리스트 준비
+        # Prepare the list of masks to process
         if is_instance:
-            # 개별 마스크를 각각 처리
+            # Process each individual mask separately
             process_masks = [(masks[i].cpu().numpy().squeeze(), float(scores[i]), i) 
                              for i in range(len(masks)) if scores[i] >= config['sam_threshold']]
         else:
-            # 모든 마스크를 하나로 합쳐서 ROI 생성
+            # Combine all detected masks into a single ROI
             combined_mask = torch.any(masks, dim=0).cpu().numpy().squeeze()
             avg_score = float(torch.mean(scores))
             process_masks = [(combined_mask, avg_score, None)]
@@ -99,7 +98,7 @@ def run_sam3_preprocessing(split_name, processor_model, is_instance, config):
             y_indices, x_indices = np.where(mask_2d > 0)
             if len(x_indices) == 0: continue
 
-            # Bbox 및 마진 계산
+            # Calculate Bbox and margin padding
             x_min, x_max = x_indices.min(), x_indices.max()
             y_min, y_max = y_indices.min(), y_indices.max()
             w_box, h_box = x_max - x_min, y_max - y_min
@@ -109,18 +108,17 @@ def run_sam3_preprocessing(split_name, processor_model, is_instance, config):
             x2, y2 = min(img_w, x_max + pad_x), min(img_h, y_max + pad_y)
             crop_w, crop_h = x2 - x1, y2 - y1
 
-            # 이미지 크롭 및 저장
+            # Crop and save image
             cropped_img = img_np[y1:y2, x1:x2]
 
-            # 인스턴스 크롭의 경우 instance_{인스턴스 인덱스} 로 파일명 구분
-            # ROI 크롭은 단순히 파일 명에 _cropped 로 파일명 구분
+            # Filename differentiation: instance_{idx} vs cropped
             suffix = f"instance_{idx:02d}" if is_instance else "cropped"
             instance_name = f"{file_base}_{suffix}"
 
             img_save_path = os.path.join(base_output_dir, "images", split_name, f"{instance_name}.png")
             cv2.imwrite(img_save_path, cv2.cvtColor(cropped_img, cv2.COLOR_RGB2BGR))
 
-            # 라벨 리매핑
+            # Label Remapping
             yolo_lines = []
             if split_name != "test":
                 for line in raw_lines:
@@ -129,11 +127,11 @@ def run_sam3_preprocessing(split_name, processor_model, is_instance, config):
                     cid = parts[0]
                     norm_coords = np.array(list(map(float, parts[1:]))).reshape(-1, 2)
                     
-                    # 원본 픽셀 좌표 복원
+                    # Restore original pixel coordinates
                     gt_pts = (norm_coords * [img_w, img_h]).astype(np.float32)
 
                     if is_instance:
-                        # [Instance 모드] IoU 체크로 현재 치아에 해당하는 라벨만 추출
+                        # [Instance Mode] Extract only relevant labels using IoU check
                         gt_mask = np.zeros((img_h, img_w), dtype=np.uint8)
                         cv2.fillPoly(gt_mask, [gt_pts.astype(np.int32)], 1)
                         intersection = np.logical_and(mask_2d > 0, gt_mask > 0).sum()
@@ -141,18 +139,18 @@ def run_sam3_preprocessing(split_name, processor_model, is_instance, config):
                         if (intersection / gt_area if gt_area > 0 else 0) < config['iou_filter_th']:
                             continue
                     
-                    # [공통] 크롭 좌표계로 변환 및 정규화
+                    # [Common] Transform coordinates to crop coordinate system and normalize
                     local_pts = (gt_pts - [x1, y1]) / [crop_w, crop_h]
                     local_pts = np.clip(local_pts, 0, 1)
                     str_pts = " ".join([f"{p:.6f}" for p in local_pts.flatten()])
                     yolo_lines.append(f"{cid} {str_pts}")
 
-            # 라벨 저장
+            # Save remapped labels
             lbl_save_path = os.path.join(base_output_dir, "labels", split_name, f"{instance_name}.txt")
             with open(lbl_save_path, "w") as f:
                 if yolo_lines: f.write("\n".join(yolo_lines))
 
-            # 메타데이터 추가
+            # Append metadata
             metadata_list.append({
                 "instance_name": instance_name,
                 "crop_coords": [int(x1), int(y1), int(x2), int(y2)],
@@ -161,7 +159,7 @@ def run_sam3_preprocessing(split_name, processor_model, is_instance, config):
             })
             if is_instance: total_count += 1
 
-        # JSON 메타데이터 저장
+        # Save JSON metadata
         if metadata_list:
             json_path = os.path.join(base_output_dir, "metadata", split_name, f"{file_base}.json")
             with open(json_path, 'w') as f:
@@ -169,37 +167,36 @@ def run_sam3_preprocessing(split_name, processor_model, is_instance, config):
         
         if not is_instance: total_count += 1
 
-    print(f"✅ {split_name.upper()} 완료! ({mode_str} 총합: {total_count})")
+    print(f"✅ {split_name.upper()} processing complete. ({mode_str} Total: {total_count})")
 
 def extract_with_progress(zip_path, extract_dir):
-    """zip 파일을 tqdm 프로그레스 바와 함께 압축 해제 (NameError 해결)"""
+    """Unzip files with a tqdm progress bar."""
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         files = zip_ref.namelist()
         for file in tqdm(files, desc=f"📦 Extracting {os.path.basename(zip_path)}", unit="file", leave=False):
             zip_ref.extract(file, extract_dir)
 
 def prepare_directories():
-    """기존의 불완전한 폴더를 삭제하고 새 구조를 만듭니다."""
+    """Remove existing incomplete folders and create a fresh directory structure."""
     base_data_dir = "./data"
     sub_dirs = ["alphadent_instance", "alphadent_roi"]
 
-    # 1. data 폴더가 없으면 생성
+    # 1. Create data folder if missing
     if not os.path.exists(base_data_dir):
         os.makedirs(base_data_dir)
-        print(f"📁 {base_data_dir} 폴더를 생성했습니다.")
+        print(f"📁 Created base directory: {base_data_dir}")
 
-    # 2. 기존 인스턴스/ROI 폴더 삭제 후 재생성 (깔끔한 시작)
+    # 2. Reset Instance/ROI directories for a clean start
     for sub in sub_dirs:
         target_path = os.path.join(base_data_dir, sub)
         if os.path.exists(target_path):
-            shutil.rmtree(target_path) # 폴더 전체 삭제
-            print(f"🗑️ 기존 {target_path} 폴더를 삭제했습니다.")
+            shutil.rmtree(target_path) # Delete existing folder
+            print(f"🗑️ Deleted existing directory: {target_path}")
         os.makedirs(target_path)
-        print(f"✅ 새 {target_path} 폴더를 생성했습니다.")
-
+        print(f"✅ Created fresh directory: {target_path}")
 
 def download_all_from_drive():
-    """구글 드라이브에서 다운로드 후 tqdm 바와 함께 압축 해제"""
+    """Download preprocessed datasets from GDrive and extract with tqdm progress."""
     prepare_directories()
 
     files = {
@@ -210,43 +207,43 @@ def download_all_from_drive():
     for filename, (file_id, target_extract_dir) in files.items():
         zip_path = os.path.join("./data", filename)
         
-        print(f"\n🚚 {filename} 다운로드 중...")
+        print(f"\n🚚 Downloading {filename}...")
         subprocess.run(["gdown", "--id", file_id, "-O", zip_path], check=True)
         
-        # 🔥 수정된 압축 해제 로직 호출
+        # Execute progress-aware extraction
         extract_with_progress(zip_path, target_extract_dir)
         
         if os.path.exists(zip_path):
             os.remove(zip_path)
-            print(f"🗑️ 임시 파일 {zip_path} 삭제 완료.")
+            print(f"🗑️ Cleaned up temporary file: {zip_path}")
 
-    print("\n✨ 모든 데이터셋 세팅이 완료되었습니다!")
+    print("\n✨ All preprocessed datasets are ready!")
 
 def main():
-    # 1. 인자 파서 설정
-    parser = argparse.ArgumentParser(description="SAM-3 Teeth Segmentation Preprocessing")
+    # 1. Argument Parser Setup
+    parser = argparse.ArgumentParser(description="SAM-3 Teeth Segmentation Preprocessing Pipeline")
     
-    # --mode: roi, instance 중 선택 (기본값은 둘 다 실행하기 위해 None)
+    # --mode: Choose between 'roi' and 'instance' (Runs both if omitted)
     parser.add_argument("--mode", type=str, choices=["roi", "instance"], 
                         help="Execution mode: 'roi' or 'instance'. If omitted, both will run.")
     
-    # --split: train, valid, test 중 선택 (기본값은 모두 실행하기 위해 None)
+    # --split: Choose data split (Runs all if omitted)
     parser.add_argument("--split", type=str, choices=["train", "valid", "test"],
                         help="Data split: 'train', 'valid', or 'test'. If omitted, all splits will run.")
-    # 다운로드 전용 옵션
-    parser.add_argument("--from_drive", action="store_true", help="Download preprocessed data from Google Drive")
+    
+    # Download-only option
+    parser.add_argument("--from_drive", action="store_true", help="Download preprocessed data from Google Drive instead of processing")
     
     args = parser.parse_args()
 
-    # 만약 --from_drive 옵션을 주면 전처리를 안 하고 다운로드만 수행
+    # Case: From Drive download (Skip processing)
     if args.from_drive:
         download_all_from_drive()
-        return # 전처리 로직 실행 안 하고 종료
+        return 
 
-    # 2. 일반 전처리 모드 (기존 데이터를 지우지 않고 필요한 폴더만 생성)
+    # 2. Environment Setup (Prepare directories and model)
     prepare_directories()
 
-    # 2. 실행 환경 준비
     load_dotenv()
     hf_token = os.getenv('HUGGINGFACE_API_KEY')
     if hf_token:
@@ -259,11 +256,11 @@ def main():
     config = load_config()
     set_seed(42)
 
-    # 3. 실행할 대상 리스트 결정
+    # 3. Determine Execution Targets
     modes_to_run = [args.mode] if args.mode else ["roi", "instance"]
     splits_to_run = [args.split] if args.split else ["train", "valid", "test"]
 
-    # 4. 루프 실행
+    # 4. Execute Pipeline
     for m in modes_to_run:
         is_instance = (m == "instance")
         for s in splits_to_run:

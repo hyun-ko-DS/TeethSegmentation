@@ -15,7 +15,7 @@ class WMFConfig:
         self.agreement_boost_thr = config['wmf_agreement_boost_thres']
 
 # ============================================================
-# 2. Utility Functions (마스크 변환 및 계산)
+# 2. Utility Functions (Mask Fusion and Calculation)
 # ============================================================
 def poly_to_mask(poly_str, config):
     mask = np.zeros((config.canvas_h, config.canvas_w), dtype=np.float32)
@@ -46,8 +46,8 @@ def get_iou(m1, m2):
 
 def run_wmf_ensemble(models, model_names, is_roi_list, config_dict, paths_list, is_valid=True):
     """
-    is_valid=True: Validation 모드 (GT 시각화)
-    is_valid=False: Test 모드 (GT 제외 시각화 + wmf_ensemble 폴더 내 submission.csv 생성)
+    is_valid=True: Validation mode (with GT visualization)
+    is_valid=False: Test mode (Visualizatin w/o GT + Create submission.csv)
     """
     wmf_config = WMFConfig(config_dict)
     
@@ -70,7 +70,7 @@ def run_wmf_ensemble(models, model_names, is_roi_list, config_dict, paths_list, 
     target_files = glob.glob(os.path.join(paths_list[0][orig_img_key], "*.jpg")) + \
                    glob.glob(os.path.join(paths_list[0][orig_img_key], "*.png"))
     
-    all_ensemble_results = [] # Test 시 CSV 작성을 위한 리스트
+    all_ensemble_results = []
 
     # 2. 이미지별 앙상블 루프
     for img_path in tqdm(target_files, desc=f"Processing {mode.upper()}"):

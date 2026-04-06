@@ -1,7 +1,7 @@
 *.json
 *.yaml
 data/
-models/
+models/**/*.pt
 .ipynb_checkpoints/
 etc.ipynb
 *.zip
