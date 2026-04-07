@@ -1,4 +1,4 @@
-path: /data/alphadent_instance
+path: ./data/alphadent_instance
 train: images/train
 val: images/valid
 test: images/test

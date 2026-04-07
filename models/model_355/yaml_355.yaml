@@ -1,4 +1,4 @@
-path: /data/alphadent_roi
+path: ./data/alphadent_roi
 train: images/train
 val: images/valid
 test: images/test
