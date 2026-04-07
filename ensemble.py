@@ -5,8 +5,10 @@ import json
 import numpy as np
 import os
 import pandas as pd
+from ultralytics import YOLO
 from tqdm import tqdm
 
+from caf import *
 from utils import *
 
 # ============================================================
@@ -56,6 +58,61 @@ def get_iou(m1, m2):
     un = np.logical_or(m1, m2).sum()
     return it / un if un > 0 else 0
 
+def draw_predictions_on_image(image, polygons, class_names, colors, is_gt=False):
+    """
+    Draws only the outlines of masks on the image with class-specific colors.
+    """
+    h, w = image.shape[:2]
+    vis_img = image.copy()
+
+    for poly_data in polygons:
+        class_id = poly_data['class_id']
+        pts = poly_data['points'].astype(np.int32)
+        conf = poly_data.get('conf', 1.0)
+
+        # 1. Color conversion (0~1 float -> 0~255 BGR)
+        raw_color = colors[class_id % len(colors)]
+        color_bgr = (
+            int(np.round(raw_color[2] * 255)), # Blue
+            int(np.round(raw_color[1] * 255)), # Green
+            int(np.round(raw_color[0] * 255))  # Red
+        )
+
+        # 2. Draw outlines (Thickness adjusted for high resolution)
+        thickness = max(3, int(w / 800))
+        cv2.polylines(vis_img, [pts], isClosed=True, color=color_bgr, thickness=thickness)
+
+        # Skip text labels for Ground Truth
+        if is_gt:
+            continue
+
+        # 3. Setup text label style
+        label_text = f"{class_names[class_id]}: {conf:.2f}"
+        font_scale = max(0.5, w / 1600)
+        text_thickness = max(1, int(w / 1400))
+        (tw, th), baseline = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_thickness)
+        padding = int(8 * font_scale)
+
+        # 4. Position and boundary correction for text
+        txt_x, txt_y = pts[0][0], pts[0][1] - 10
+        if txt_x + tw + padding > w: txt_x = w - tw - padding * 2
+        txt_x = max(padding, txt_x)
+        if txt_y < th + padding * 2: txt_y = pts[0][1] + th + padding * 2
+
+        # 5. Draw text background box and label
+        cv2.rectangle(vis_img, (int(txt_x - padding), int(txt_y - th - padding)),
+                      (int(txt_x + tw + padding), int(txt_y + baseline + padding)), color_bgr, -1)
+
+        # Determine text color based on background brightness
+        brightness = 0.299 * color_bgr[2] + 0.587 * color_bgr[1] + 0.114 * color_bgr[0]
+        txt_color = (0, 0, 0) if brightness > 127 else (255, 255, 255)
+
+        cv2.putText(vis_img, label_text, (int(txt_x), int(txt_y)),
+                    cv2.FONT_HERSHEY_SIMPLEX, font_scale, txt_color,
+                    thickness=text_thickness, lineType=cv2.LINE_AA)
+
+    return vis_img
+
 # ============================================================
 # 3. Ensemble Core Logic
 # ============================================================
@@ -97,7 +154,7 @@ def perform_wmf_direct(model_outputs, config):
     # [Step 2] Fusion and Correction
     ensemble_rows = []
     for cluster in clusters:
-        # Require at least two models to agree (can be adjusted)
+        # Require at least two models to agree
         if len(cluster) < 2:
             continue
 
@@ -112,6 +169,7 @@ def perform_wmf_direct(model_outputs, config):
 
         avg_conf = weighted_conf / total_weight
         agreement_ratio = len(cluster) / num_models
+        
         # Boost confidence based on model agreement
         final_conf = avg_conf * (agreement_ratio ** config.agreement_boost_thr)
 
@@ -136,15 +194,22 @@ def perform_wmf_direct(model_outputs, config):
 def run_wmf_ensemble(models, model_names, is_roi_list, config_dict, paths_list, is_valid=True):
     """
     Main ensemble pipeline.
-    is_valid=True: Validation mode with GT comparison.
-    is_valid=False: Test mode for generating submission files.
+    Saves outputs to ./results/{valid or test}/wmf_ensemble
     """
     wmf_config = WMFConfig(config_dict)
     
-    # 1. Setup directory structure
+    # Class mapping for labeling
+    CLASS_INFO = {
+        0: {'name': 'Abrasion'}, 1: {'name': 'Filling'}, 2: {'name': 'Crown'},
+        3: {'name': 'Caries Class 1'}, 4: {'name': 'Caries Class 2'},
+        5: {'name': 'Caries Class 3'}, 6: {'name': 'Caries Class 4'},
+        7: {'name': 'Caries Class 5'}, 8: {'name': 'Caries Class 6'}
+    }
+    CLASS_NAMES = [CLASS_INFO[i]['name'] for i in range(len(CLASS_INFO))]
+    
+    # 1. Dynamic Directory Setup
     mode = "valid" if is_valid else "test"
-    base_output_dir = os.path.join(paths_list[0]['output_dir'], mode)
-    save_dir = os.path.join(base_output_dir, 'wmf_ensemble')
+    save_dir = os.path.join("results", mode, "wmf_ensemble")
     os.makedirs(save_dir, exist_ok=True)
 
     # Path keys mapping
@@ -154,7 +219,7 @@ def run_wmf_ensemble(models, model_names, is_roi_list, config_dict, paths_list, 
     orig_lbl_key = f"original_{mode}_labels_dir"
 
     print(f"🔥 Starting WMF Ensemble [Mode: {mode.upper()}]")
-    print(f"📂 Save Path: {save_dir}")
+    print(f"📂 Results will be saved to: {os.path.abspath(save_dir)}")
     
     target_files = glob.glob(os.path.join(paths_list[0][orig_img_key], "*.jpg")) + \
                    glob.glob(os.path.join(paths_list[0][orig_img_key], "*.png"))
@@ -165,7 +230,6 @@ def run_wmf_ensemble(models, model_names, is_roi_list, config_dict, paths_list, 
     for img_path in tqdm(target_files, desc=f"Processing {mode.upper()}"):
         file_id = os.path.splitext(os.path.basename(img_path))[0]
         
-        # Load metadata for original image dimensions
         meta_path = os.path.join(paths_list[0][meta_path_key], f"{file_id}.json")
         if not os.path.exists(meta_path):
             continue
@@ -224,7 +288,6 @@ def run_wmf_ensemble(models, model_names, is_roi_list, config_dict, paths_list, 
         # [Step B] Execute WMF Ensemble
         fused_df = perform_wmf_direct(all_model_detections, wmf_config)
         
-        # Save results for CSV if in Test mode
         if not is_valid and not fused_df.empty:
             all_ensemble_results.append(fused_df)
 
@@ -250,7 +313,6 @@ def run_wmf_ensemble(models, model_names, is_roi_list, config_dict, paths_list, 
         else:
             gt_label_text = "Test Original Image"
 
-        # Drawing utility assumed to be available in global scope
         img_gt = draw_predictions_on_image(orig_img.copy(), gt_list, CLASS_NAMES, config_dict['colors'], is_gt=True)
         img_pred = draw_predictions_on_image(orig_img.copy(), preds, CLASS_NAMES, config_dict['colors'], is_gt=False)
         
@@ -276,20 +338,62 @@ def run_wmf_ensemble(models, model_names, is_roi_list, config_dict, paths_list, 
 # 4. Entry Point (Argparse)
 # ============================================================
 def main():
+    # Setup command-line argument parsing
     parser = argparse.ArgumentParser(description="WMF Ensemble for Teeth Segmentation")
     parser.add_argument("--data", type=str, required=True, choices=["valid", "test"],
                         help="Choose data split for ensemble: 'valid' or 'test'")
     args = parser.parse_args()
 
-    # Determine validation flag based on data input
-    is_valid_flag = True if args.data == "valid" else False
-
-    models = [model_365, model_360, model_357, model_355]
+    print("📦 Loading models for ensemble...")
+    
+    # 1. Define model names used in the ensemble
+    model_names = ['model_365', 'model_360', 'model_357', 'model_355']
+    
+    models = []
+    for name in model_names:
+        # Resolve the weight path: expected format is models/model_XXX/best_XXX.pt
+        suffix = name.rsplit("_", 1)[-1]
+        weight_path = os.path.join("models", name, f"best_{suffix}.pt")
+        
+        if os.path.exists(weight_path):
+            print(f"   • Loading {name} from {weight_path}")
+            models.append(YOLO(weight_path))
+        else:
+            print(f"   ⚠️ Warning: Weights not found for {name} at {weight_path}")
+    
+    # 2. Flag whether the model uses ROI-based (True) or Instance-based (False) crops
     is_roi_list = [True, False, True, True]
+    
+    # 3. Define path dictionaries for ROI-based preprocessed data
+    paths_roi = {
+        'output_dir': './data/alphadent_roi',
+        'valid_images_path': './data/alphadent_roi/images/valid',
+        'test_images_path': './data/alphadent_roi/images/test',
+        'valid_metadata_path': './data/alphadent_roi/metadata/valid',
+        'test_metadata_path': './data/alphadent_roi/metadata/test',
+        'original_valid_images_dir': './data/alphadent_extracted/images/valid',
+        'original_test_images_dir': './data/alphadent_extracted/images/test',
+        'original_valid_labels_dir': './data/alphadent_extracted/labels/valid'
+    }
+
+    # 4. Define path dictionaries for Instance-based preprocessed data
+    paths_instance = {
+        'output_dir': './data/alphadent_instance',
+        'valid_images_path': './data/alphadent_instance/images/valid',
+        'test_images_path': './data/alphadent_instance/images/test',
+        'valid_metadata_path': './data/alphadent_instance/metadata/valid',
+        'test_metadata_path': './data/alphadent_instance/metadata/test',
+        'original_valid_images_dir': './data/alphadent_extracted/images/valid',
+        'original_test_images_dir': './data/alphadent_extracted/images/test',
+        'original_valid_labels_dir': './data/alphadent_extracted/labels/valid'
+    }
+
+    # Map each model to its respective path dictionary
     paths_list = [paths_roi, paths_instance, paths_roi, paths_roi]
 
-    config = load_config("config.json")
-
+    # 5. Load global configuration and trigger the ensemble pipeline
+    config = load_config()
+    is_valid_flag = (args.data == "valid")
     run_wmf_ensemble(
         models=models,
         model_names=model_names,
@@ -298,6 +402,9 @@ def main():
         paths_list=paths_list,
         is_valid=is_valid_flag
     )
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()

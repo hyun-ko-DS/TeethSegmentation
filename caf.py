@@ -2,6 +2,21 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+class ChannelShuffle(nn.Module):
+    def __init__(self, groups = 4):
+        super().__init__()
+        self.groups = groups
+
+    def forward(self, x):
+        # x: (B, C, H, W)
+        b, c, h, w = x.size()
+        assert c % self.groups == 0, "channels must be divisible by groups"
+
+        x = x.view(b, self.groups, c // self.groups, h, w)
+        x = x.transpose(1, 2).contiguous()
+        x = x.view(b, c, h, w)
+        return x
+
 class CAFBlock(nn.Module):
     # Default class labels
     runtime_alpha = 0.5

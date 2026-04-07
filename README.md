@@ -151,7 +151,10 @@ python train.py --mode train --model_name model_355
 #### Option B: Load best.pt from GDrive
 
 ```bash
-python train.py --from_drive
+python train.py --mode from_drive --model_name model_365
+python train.py --mode from_drive --model_name model_360
+python train.py --mode from_drive --model_name model_357
+python train.py --mode from_drive --model_name model_355
 ```
 
 ### 4. Ensemble & Inference
