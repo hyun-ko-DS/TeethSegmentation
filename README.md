@@ -2,9 +2,11 @@
 
 ## Problem
 
-This project was developed for the **AlphaDent: Teeth Marking** Kaggle competition, which focuses on the precise identification and segmentation of dental pathologies. In modern dentistry, detecting dental caries (cavities) remains a significant challenge due to their **microscopic scale** and **highly irregular morphologies**, making manual diagnosis a time-consuming and labor-intensive process for clinicians. 
+This project was developed for the AlphaDent: Teeth Marking Kaggle competition, which focuses on the precise identification and segmentation of dental pathologies.
 
-To address these hurdles, this repo addresses a robust deep learning pipeline for **pixel-level detection and segmentation**, serving as a **Diagnostic Decision Support System (DDSS)**. By automating the identification of lesions at various stages, this system enables early detection of pathologies and assists clinicians in formulating rapid, data-driven treatment strategies.
+In current dental practice, precise diagnosis often relies heavily on expensive, large-scale imaging equipment such as CT or X-ray scans. Requiring these high-cost procedures for every patient, regardless of symptom severity, creates significant inefficiencies in hospital operations and increases the financial and time burden on patients. Furthermore, manual identification of dental caries remains a challenge due to their microscopic scale and highly irregular morphologies, making the initial diagnostic phase labor-intensive.
+
+To address these hurdles, this repository introduces a robust deep learning pipeline designed as a Real-time Visual Consultation Support Solution. By providing a Diagnostic Decision Support System (DDSS) that utilizes intraoral images prior to high-cost imaging, this project enables immediate lesion identification and primary screening. This approach maximizes the efficiency of the dental care cycle, assisting clinicians in formulating rapid, data-driven treatment strategies and enabling the early detection of pathologies at scale.
 
 - Competition Link: https://www.kaggle.com/competitions/alpha-dent
 
@@ -62,6 +64,7 @@ graph TD
     class G winner;
 ```
 
+
 ## Ablation Study
 ### Confidence Threshold Optimization
 | Conf Threshold | test mAP@50 | Avg. Detections per Image |
@@ -97,7 +100,8 @@ graph TD
 | **P3+P4+P5** | **MSNN + ACFM** | **0.5** | **0.365** | **Best Performance (Final)** |
 
 ## Results
-
+- Kaggle Leaderboard (1st; mAP@50 0.4144): https://www.kaggle.com/competitions/alpha-dent/leaderboard 
+- All Prediction Results: https://drive.google.com/drive/folders/1uwn-WoBZlsVlf9EHno8Wxtu0KCcB42Fp?usp=drive_link
 
 ## How to Run
 
@@ -106,7 +110,7 @@ First, create a virtual environment and install the required dependencies.
 
 ```bash
 # Create and activate a conda environment
-conda create -n teeth python=3.11 -y
+conda create -n teeth python >= 3.11 -y
 conda activate teeth
 
 # Clone the repository
@@ -139,6 +143,8 @@ python sam3_preprocessing.py --from_drive
 ### 3. Training
 Start training with the specialized CAF-Block and NWD loss configuration.
 
+The entire training process was conducted on a single NVIDIA A100 GPU (40GB VRAM). 
+
 > **Disclaimer:** The `config.json` and `best.pt` files required for training are not included in this repository due to file size limits. Please contact **hyunko954@gmail.com** for access to the download links.
 
 #### Option A: Train from scratch
@@ -158,7 +164,7 @@ python train.py --mode from_drive --model_name model_355
 ```
 
 ### 4. Ensemble & Inference
-Generate the final submission for the leaderboard.
+Generate the final leaderboard submission. The estimated inference time, including model ensemble, is 2.5 seconds per image on a single NVIDIA RTX Ada 2000 GPU (16GB VRAM).
 ```bash
 # For validation check
 python ensemble.py --data valid
