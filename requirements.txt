@@ -7,12 +7,18 @@ pandas==2.2.3
 einops
 
 # ==============================================================================
-# PyTorch Ecosystem (2.8.0 Series)
+# PyTorch & ONNX Ecosystem (CUDA 12.4 Compatibility)
 # ==============================================================================
+# 1. PyTorch
 --extra-index-url https://download.pytorch.org/whl/cu124
 torch==2.8.0
 torchvision==0.23.0
 torchaudio==2.8.0
+
+# 2. ONNX Runtime
+--extra-index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-12/pypi/simple/
+onnxruntime-gpu==1.19.0
+protobuf>=3.20.2,<5.0.0
 
 # ==============================================================================
 # SAM-3 & Meta Research
@@ -20,8 +26,6 @@ torchaudio==2.8.0
 -e git+https://github.com/facebookresearch/sam3.git#egg=sam3
 iopath>=0.1.10
 pycocotools>=2.0.8
-# onnx>=1.17.0
-# onnxruntime-gpu>=1.20.1
 
 # ==============================================================================
 # Core Computer Vision & Processing

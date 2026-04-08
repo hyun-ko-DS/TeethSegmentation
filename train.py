@@ -15,11 +15,31 @@ from utils import *
 tasks.CAFBlock = CAFBlock
 
 # Google Drive file IDs
-DRIVE_BEST_PT_IDS = {
-    "model_365": "10b1nx9PUgQWOVVPSRx7m98sJxURfqxhp",
-    "model_360": "1Kj0-T9xiKdRugcHqaef2NpQ3hyNMmzY4",
-    "model_357": "1rIHJakSahRRVOO1qfZjlAVxEUhO-yFP2",
-    "model_355": "1f3AI8eawYGetpj_KOV9ywrC4QZQjFj50",
+DRIVE_IDS = {
+    "model_365": {
+        "pt": "10b1nx9PUgQWOVVPSRx7m98sJxURfqxhp",
+        "onnx": "1xwpTu5knpAI9igwqOIBy373eUi7MlySI",
+        "json": "1We0eBkbrG4_SBn5UVnR_smyLRUpryRBr",
+        "engine": "13fyssWX7NhWRQXjRv2Y9n4IC01-X2Hdb"
+    },
+    "model_360": {
+        "pt": "1Kj0-T9xiKdRugcHqaef2NpQ3hyNMmzY4",
+        "onnx": "1C-RiOOO8Gf7G0M-ff8aJZoJn8LFpFsWU",
+        "json": "1oOUOEEpgQulWgIEFS9aGtqoFfX2EeXXZ",
+        "engine": "1UlKvPplyNb6CYoDRvvyhyvV5C7nk93_A"
+    },
+    "model_357": {
+        "pt": "1rIHJakSahRRVOO1qfZjlAVxEUhO-yFP2",
+        "onnx": "1YURCE37EI0PP1xc8_jcewHseyjI4JAf1",
+        "json": "1_EjLeM0JaGBrrFAmnYyRt5pBrOnLMhT5",
+        "engine": "1dgbgJH5_8uf3h0ARhs1PGOT-NYTGDMTy"
+    },
+    "model_355": {
+        "pt": "1f3AI8eawYGetpj_KOV9ywrC4QZQjFj50",
+        "onnx": "1eObLMQ9tbLwSl2g5NA1lmIwlS5wHNOhO",
+        "json": "1PsJrDJ8wqTsMPlz0EJt0WA8pCt5LvIf8",
+        "engine": "1J9YzgeeUL2UVuARTkp9dTbM_McnsnxWu"
+    },
 }
 
 _TRAIN_SKIP_KEYS = frozenset({
@@ -49,6 +69,17 @@ def get_args():
     )
     return parser.parse_args()
 
+def get_all_paths(model_name: str):
+    """모델 이름에 따른 모든 로컬 경로 반환"""
+    suffix = model_name.rsplit("_", 1)[-1]
+    model_dir = Path("models") / model_name
+    return {
+        "pt": model_dir / f"best_{suffix}.pt",
+        "onnx": model_dir / f"best_{suffix}.onnx",
+        "json": model_dir / f"config_{suffix}.json",
+        "yaml": model_dir / f"yaml_{suffix}.yaml" # YAML은 보통 로컬 생성
+    }
+
 def model_checkpoint_paths(model_name: str) -> Tuple[Path, Path]:
     suffix = model_name.rsplit("_", 1)[-1]
     model_dir = Path("models") / model_name
@@ -62,40 +93,41 @@ def resolve_model_paths(model_name: str) -> Tuple[Path, Path, Path]:
     yaml_path = model_dir / f"yaml_{suffix}.yaml"
     return model_dir, config_path, yaml_path
 
-def download_best_pt_from_drive(model_name: str, weight_path: Path) -> None:
-    print(f"📡 Initializing GDrive download for {model_name}...")
-    file_id = DRIVE_BEST_PT_IDS.get(model_name)
-    if not file_id:
-        raise RuntimeError(f"No GDrive ID found for {model_name}.")
+def download_resource(model_name: str, file_type: str, target_path: Path):
+    """공통 다운로드 로직"""
+    ids = DRIVE_IDS.get(model_name)
+    if not ids or file_type not in ids or ids[file_type] == "1-XXXXX":
+        print(f"⚠️ Skip: No valid GDrive ID for {model_name} ({file_type})")
+        return
+
+    file_id = ids[file_type]
+    print(f"📡 Downloading {file_type} for {model_name}...")
+    target_path.parent.mkdir(parents=True, exist_ok=True)
     
-    weight_path.parent.mkdir(parents=True, exist_ok=True)
-    gdown.download(id=file_id, output=str(weight_path), quiet=False)
+    gdown.download(id=file_id, output=str(target_path), quiet=False)
     
-    if not weight_path.is_file():
-        raise RuntimeError(f"Download failed for {weight_path}")
+    if not target_path.is_file():
+        print(f"❌ Failed to download {target_path}")
 
 def run_train(model_name: str, use_drive_weights: bool = False) -> None:
-    """
-    Main training pipeline.
-    If use_drive_weights is True, it downloads/uses best_*.pt.
-    If False, it initializes from yaml (scratch).
-    """
-    model_dir, config_path, yaml_path = resolve_model_paths(model_name)
-    _, weight_path = model_checkpoint_paths(model_name)
+    paths = get_all_paths(model_name)
 
-    if not config_path.is_file() or not yaml_path.is_file():
-        raise FileNotFoundError(f"Missing config or yaml in {model_dir}")
-
-    # 1. Load Config
-    config = load_config(str(config_path))
+    # 1. 필수 파일(Config, YAML) 확인 및 자동 다운로드 시도
+    if not paths["json"].exists():
+        download_resource(model_name, "json", paths["json"])
     
-    # 2. Inject CAF (Only for specific models)
+    if not paths["json"].is_file() or not paths["yaml"].is_file():
+        raise FileNotFoundError(f"Missing config or yaml for {model_name}. Please check local 'models' folder.")
+
+    # 2. Load Config
+    config = load_config(str(paths["json"]))
+    
+    # 3. Inject CAF & NWD Loss Patch (기존 로직 유지)
     if model_name in ["model_365", "model_355"]:
         CAFBlock.runtime_alpha = config["caf_alpha"]
         CAFBlock.runtime_dilation_rates = tuple(config["caf_dilation_rates"])
         print(f"✨ CAF Config Injected: Alpha={config['caf_alpha']}")
 
-    # 3. Apply NWD Loss Patch
     nwd_alpha = config["nwd_alpha"]
     if not hasattr(loss, "original_bbox_iou"):
         loss.original_bbox_iou = loss.bbox_iou
@@ -103,59 +135,41 @@ def run_train(model_name: str, use_drive_weights: bool = False) -> None:
     print(f"✅ NWD Loss Patch Applied (Alpha={nwd_alpha})")
 
     # 4. Handle Model Initialization
-    model_dir.mkdir(parents=True, exist_ok=True)
-    
     if use_drive_weights:
-        # Mode: from_drive
-        if not weight_path.exists():
-            download_best_pt_from_drive(model_name, weight_path)
-        else:
-            print(f"Using existing local checkpoint: {weight_path}")
-        model = YOLO(str(weight_path))
-        start_weights = str(weight_path)
+        if not paths["pt"].exists():
+            download_resource(model_name, "pt", paths["pt"])
+        
+        model = YOLO(str(paths["pt"]))
+        start_weights = str(paths["pt"])
     else:
-        # Mode: train (Scratch)
-        print(f"🚀 Starting training FROM SCRATCH using {yaml_path.name}")
-        model = YOLO(str(yaml_path))
+        print(f"🚀 Starting training FROM SCRATCH using {paths['yaml'].name}")
+        model = YOLO(str(paths["yaml"]))
         start_weights = "None (Scratch)"
 
-    # 5. Build Training Arguments
-    train_args = {}
-    for key, value in config.items():
-        if key not in _TRAIN_SKIP_KEYS:
-            train_args[key] = value
-
+    # 5. Build Training Arguments (기존 로직 유지)
+    train_args = {k: v for k, v in config.items() if k not in _TRAIN_SKIP_KEYS}
     train_args.update({
-        "data": str(yaml_path),
+        "data": str(paths["yaml"]),
         "project": "models",
         "name": model_name,
         "exist_ok": True,
         "save": True
     })
 
-    # 6. Pre-flight Summary
-    print("\n" + "=" * 60)
-    print(f"🔥 TRAINING MODE: {'FROM DRIVE' if use_drive_weights else 'SCRATCH'}")
-    print(f"📍 Model Name   : {model_name}")
-    print(f"📍 Start Weights: {start_weights}")
-    print(f"📍 Save Dir     : {model_dir}")
-    print("=" * 60 + "\n")
-
     # Execute
     model.train(**train_args)
 
 def main():
     args_cli = get_args()
+    paths = get_all_paths(args_cli.model_name)
     
     if args_cli.mode == "download":
-        model_dir, weight_path = model_checkpoint_paths(args_cli.model_name)
-        download_best_pt_from_drive(args_cli.model_name, weight_path)
+        for f_type in ["pt", "onnx", "json"]:
+            download_resource(args_cli.model_name, f_type, paths[f_type])
+        print(f"✅ All resources for {args_cli.model_name} checked.")
     
-    elif args_cli.mode == "from_drive":
-        run_train(args_cli.model_name, use_drive_weights=True)
-    
-    elif args_cli.mode == "train":
-        run_train(args_cli.model_name, use_drive_weights=False)
+    elif args_cli.mode in ["from_drive", "train"]:
+        run_train(args_cli.model_name, use_drive_weights=(args_cli.mode == "from_drive"))
 
 if __name__ == "__main__":
     main()

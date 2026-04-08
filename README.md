@@ -154,20 +154,25 @@ python train.py --mode train --model_name model_360
 python train.py --mode train --model_name model_357
 python train.py --mode train --model_name model_355
 ```
-#### Option B: Load best.pt from GDrive
+#### Option B: Load best.pt + config.json + best.onnx from GDrive
 
 ```bash
-python train.py --mode from_drive --model_name model_365
-python train.py --mode from_drive --model_name model_360
-python train.py --mode from_drive --model_name model_357
-python train.py --mode from_drive --model_name model_355
+python train.py --mode download --model_name model_365
+python train.py --mode download --model_name model_360
+python train.py --mode download --model_name model_357
+python train.py --mode download --model_name model_355
 ```
 
 ### 4. Ensemble & Inference
 Generate the final leaderboard submission. The estimated inference time, including model ensemble, is 2.5 seconds per image on a single NVIDIA RTX Ada 2000 GPU (16GB VRAM).
 ```bash
+
 # For validation check
-python ensemble.py --data valid
+# Inference via .pt file
+python ensemble.py --data valid --weight_type pt
+# Inference via .onnx file
+python ensemble.py --data valid --weight_type onnx
 
 # For final submission.csv
-python ensemble.py --data test
+python ensemble.py --data test --weight_type pt
+python ensemble.py --data test --weight_type onnx

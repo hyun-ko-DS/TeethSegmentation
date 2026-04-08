@@ -191,7 +191,7 @@ def perform_wmf_direct(model_outputs, config):
 
     return pd.DataFrame(ensemble_rows).sort_values(by='confidence', ascending=False)
 
-def run_wmf_ensemble(models, model_names, is_roi_list, config_dict, paths_list, is_valid=True):
+def run_wmf_ensemble(models, model_names, is_roi_list, config_dict, paths_list, is_valid=True, weight_type="pt"):
     """
     Main ensemble pipeline.
     Saves outputs to ./results/{valid or test}/wmf_ensemble
@@ -254,9 +254,22 @@ def run_wmf_ensemble(models, model_names, is_roi_list, config_dict, paths_list, 
                 continue
 
             imgsz = config_dict['roi_image_size'] if is_roi else config_dict['instance_image_size']
-            results = model.predict(source=crop_paths, imgsz=imgsz, conf=config_dict['conf_thres'], 
-                                    iou=config_dict['iou_thres'], retina_masks=True, verbose=False)
-
+            
+            # task="segment" if ONNX or tensorRT
+            predict_kwargs = {
+                "source": crop_paths,
+                "imgsz": imgsz,
+                "conf": config_dict['conf_thres'],
+                "iou": config_dict['iou_thres'],
+                "retina_masks": False, # TensorRT 환경에서도 False가 훨씬 빠릅니다.
+                "verbose": False
+            }
+            
+            # TensorRT나 ONNX일 경우 task 재명시 (안전장치)
+            if weight_type in ["onnx", "engine"]:
+                predict_kwargs["task"] = "segment"
+                
+            results = model.predict(**predict_kwargs)
             for r in results:
                 crop_name = os.path.splitext(os.path.basename(r.path))[0]
                 try:
@@ -338,26 +351,33 @@ def run_wmf_ensemble(models, model_names, is_roi_list, config_dict, paths_list, 
 # 4. Entry Point (Argparse)
 # ============================================================
 def main():
-    # Setup command-line argument parsing
     parser = argparse.ArgumentParser(description="WMF Ensemble for Teeth Segmentation")
     parser.add_argument("--data", type=str, required=True, choices=["valid", "test"],
                         help="Choose data split for ensemble: 'valid' or 'test'")
+    # 1. weight_type에 engine 추가
+    parser.add_argument("--weight_type", type=str, default="pt", choices=["pt", "onnx", "engine"],
+                        help="Select weight file format: 'pt', 'onnx', or 'engine'")
     args = parser.parse_args()
 
-    print("📦 Loading models for ensemble...")
+    print(f"📦 Loading models for ensemble as {args.weight_type.upper()} format...")
     
-    # 1. Define model names used in the ensemble
     model_names = ['model_365', 'model_360', 'model_357', 'model_355']
-    
     models = []
+    
     for name in model_names:
-        # Resolve the weight path: expected format is models/model_XXX/best_XXX.pt
         suffix = name.rsplit("_", 1)[-1]
-        weight_path = os.path.join("models", name, f"best_{suffix}.pt")
+        ext = args.weight_type
+        weight_path = os.path.join("models", name, f"best_{suffix}.{ext}")
         
         if os.path.exists(weight_path):
             print(f"   • Loading {name} from {weight_path}")
-            models.append(YOLO(weight_path))
+            
+            # 2. TensorRT(.engine) 및 ONNX 로드 시 Task 명시
+            # TensorRT는 task="segment"를 명시해야 Predictor가 올바르게 설정됩니다.
+            if ext in ["onnx", "engine"]:
+                models.append(YOLO(weight_path, task="segment"))
+            else:
+                models.append(YOLO(weight_path))
         else:
             print(f"   ⚠️ Warning: Weights not found for {name} at {weight_path}")
     
@@ -394,17 +414,17 @@ def main():
     # 5. Load global configuration and trigger the ensemble pipeline
     config = load_config()
     is_valid_flag = (args.data == "valid")
+    
+    # 3. run_wmf_ensemble에 weight_type 전달
     run_wmf_ensemble(
         models=models,
         model_names=model_names,
         is_roi_list=is_roi_list,
         config_dict=config,
         paths_list=paths_list,
-        is_valid=is_valid_flag
+        is_valid=(args.data == "valid"),
+        weight_type=args.weight_type
     )
-
-if __name__ == "__main__":
-    main()
 
 if __name__ == "__main__":
     main()

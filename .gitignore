@@ -7,9 +7,9 @@ src/
 .env
 *.zip
 .ipynb_checkpoints/
-etc.ipynb
+*.ipynb
 *.csv
-.pt
+*.pt
 main.py
 
 # JSON 관련 설정: 전체 차단 후 config.json만 허용
@@ -18,3 +18,4 @@ main.py
 
 # ONNX 관련 설정: 전체 차단
 *.onnx
+*.engine
