@@ -87,7 +87,7 @@ def run_sam3_preprocessing(split_name, processor_model, is_instance, config):
         if is_instance:
             # Process each individual mask separately
             process_masks = [(masks[i].cpu().numpy().squeeze(), float(scores[i]), i) 
-                             for i in range(len(masks)) if scores[i] >= config['sam_threshold']]
+                             for i in range(len(masks)) if scores[i] >= config['sam_thres']]
         else:
             # Combine all detected masks into a single ROI
             combined_mask = torch.any(masks, dim=0).cpu().numpy().squeeze()
@@ -136,7 +136,7 @@ def run_sam3_preprocessing(split_name, processor_model, is_instance, config):
                         cv2.fillPoly(gt_mask, [gt_pts.astype(np.int32)], 1)
                         intersection = np.logical_and(mask_2d > 0, gt_mask > 0).sum()
                         gt_area = (gt_mask > 0).sum()
-                        if (intersection / gt_area if gt_area > 0 else 0) < config['iou_filter_th']:
+                        if (intersection / gt_area if gt_area > 0 else 0) < config['iou_thres']:
                             continue
                     
                     # [Common] Transform coordinates to crop coordinate system and normalize
