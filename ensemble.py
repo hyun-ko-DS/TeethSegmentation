@@ -269,36 +269,36 @@ def run_wmf_ensemble(models, model_names, is_roi_list, config_dict, paths_list, 
             if weight_type in ["onnx", "engine"]:
                 predict_kwargs["task"] = "segment"
 
-            # # --- 수정된 추론 루프 ---
-            # all_results = []
-            # for cp in crop_paths:
-            #     predict_kwargs["source"] = cp  # 단일 파일 경로 주입 (배치 사이즈 1 유지)
-            #     res = model.predict(**predict_kwargs)
-            #     all_results.extend(res)
+            # --- 수정된 추론 루프 ---
+            all_results = []
+            for cp in crop_paths:
+                predict_kwargs["source"] = cp  # 단일 파일 경로 주입 (배치 사이즈 1 유지)
+                res = model.predict(**predict_kwargs)
+                all_results.extend(res)
 
-            # # 후처리 로직 (기존과 동일하되 리스트 순회)
-            # for r in all_results:
-            #     crop_name = os.path.splitext(os.path.basename(r.path))[0]
-            #     try:
-            #         with open(os.path.join(curr_paths[meta_path_key], f"{file_id}.json"), 'r') as f:
-            #             m_list = json.load(f)
-                    
-            #         # ROI 모델은 첫 번째 메타데이터, Instance 모델은 이름 매칭
-            #         meta = m_list[0] if is_roi else next(m for m in m_list if m['instance_name'] == crop_name)
-            #         x_off, y_off = meta['crop_coords'][:2]
-            #     except Exception:
-            #         continue
-                
-            results = model.predict(**predict_kwargs)
-            for r in results:
+            # 후처리 로직 (기존과 동일하되 리스트 순회)
+            for r in all_results:
                 crop_name = os.path.splitext(os.path.basename(r.path))[0]
                 try:
                     with open(os.path.join(curr_paths[meta_path_key], f"{file_id}.json"), 'r') as f:
                         m_list = json.load(f)
+                    
+                    # ROI 모델은 첫 번째 메타데이터, Instance 모델은 이름 매칭
                     meta = m_list[0] if is_roi else next(m for m in m_list if m['instance_name'] == crop_name)
                     x_off, y_off = meta['crop_coords'][:2]
                 except Exception:
                     continue
+                
+            # results = model.predict(**predict_kwargs)
+            # for r in results:
+            #     crop_name = os.path.splitext(os.path.basename(r.path))[0]
+            #     try:
+            #         with open(os.path.join(curr_paths[meta_path_key], f"{file_id}.json"), 'r') as f:
+            #             m_list = json.load(f)
+            #         meta = m_list[0] if is_roi else next(m for m in m_list if m['instance_name'] == crop_name)
+            #         x_off, y_off = meta['crop_coords'][:2]
+            #     except Exception:
+            #         continue
 
                 if r.masks is None:
                     continue
