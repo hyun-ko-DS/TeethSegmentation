@@ -11,6 +11,7 @@ src/
 *.csv
 *.pt
 main.py
+inference.py
 
 # JSON 관련 설정: 전체 차단 후 config.json만 허용
 *.json

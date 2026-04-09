@@ -47,8 +47,8 @@ graph TD
     B --> C2[Instance Crop<br/> + 10% margin]
     
     C1 --> D1[Model 1: YOLO-seg-M <br/>+ CAF-Block on P3+P4+P5 <br/>mAP@50 0.365]
-    C1 --> D2[Model 2: YOLO-seg-M w/o CAF<br/>mAP@50 0.357]
-    C2 --> D3[Model 3: YOLO-seg-M instance w/o CAF<br/>mAP@50 0.360]
+    C1 --> D2[Model 2: YOLO-seg-M <br/>w/o CAF<br/>mAP@50 0.357]
+    C2 --> D3[Model 3: YOLO-seg-M instance <br/>w/o CAF<br/>mAP@50 0.360]
     C1 --> D4[Model 4: YOLO-seg-M <br/>+ CAF-Block on P3+P4<br/>mAP@50 0.355]
     
     D1 & D2 & D3 & D4 --> E[Weighted Mask Fusion]
@@ -126,10 +126,16 @@ You can either download the raw data and process it locally or download the alre
 
 #### Option A: Full Pipeline (Download & Preprocess)
 ```bash
-# Step 1: Download raw AlphaDent dataset from Hugging Face
+# Step 1: Register .env file and input Huggingface API Key for dataset download 
+nano.env
+HUGGINGFACE_API_KEY="YOUR API KEY"
+```
+
+```bash
+# Step 2: Download raw AlphaDent dataset from Hugging Face
 python loader.py
 
-# Step 2: Run SAM-3 Preprocessing (ROI or Instance mode)
+# Step 3: Run SAM-3 Preprocessing (ROI or Instance mode)
 python sam3_preprocessing.py --mode roi --split train
 python sam3_preprocessing.py --mode instance --split valid
 ```
@@ -145,7 +151,7 @@ Start training with the specialized CAF-Block and NWD loss configuration.
 
 The entire training process was conducted on a single NVIDIA A100 GPU (40GB VRAM). 
 
-> **Disclaimer:** The `config.json` and `best.pt` files required for training are not included in this repository due to file size limits. Please contact **hyunko954@gmail.com** for access to the download links.
+> **Disclaimer:** The `config.json` and weight files required for training are not included in this repository due to file size limits. Please contact **hyunko954@gmail.com** for access to the download links.
 
 #### Option A: Train from scratch
 ```bash
@@ -154,7 +160,9 @@ python train.py --mode train --model_name model_360
 python train.py --mode train --model_name model_357
 python train.py --mode train --model_name model_355
 ```
-#### Option B: Load best.pt + config.json + best.onnx from GDrive
+- Train Logs: https://drive.google.com/drive/folders/1kJxcYrK-8aNBmBwA-9jGuPIg7dhit-3J
+
+#### Option B: Load best.pt + config.json + best.onnx + best.engine from GDrive
 
 ```bash
 python train.py --mode download --model_name model_365
@@ -164,7 +172,7 @@ python train.py --mode download --model_name model_355
 ```
 
 ### 4. Ensemble & Inference
-Generate the final leaderboard submission. The estimated inference time, including model ensemble, is 2.5 seconds per image on a single NVIDIA RTX Ada 2000 GPU (16GB VRAM).
+Generate the final leaderboard submission. The estimated inference time, including model ensemble, is 2.5 seconds per image on a single NVIDIA RTX Ada 2000 GPU (16GB VRAM; available in RunPod).
 ```bash
 
 # For validation check
@@ -172,7 +180,12 @@ Generate the final leaderboard submission. The estimated inference time, includi
 python ensemble.py --data valid --weight_type pt
 # Inference via .onnx file
 python ensemble.py --data valid --weight_type onnx
+# Inference via .engine (TensorRT) file
+python ensemble.py --data valid --weight_type engine
 
-# For final submission.csv
+# For test prediction
 python ensemble.py --data test --weight_type pt
 python ensemble.py --data test --weight_type onnx
+python ensemble.py --data test --weight_type engine
+
+- Visualizations of final predictions: https://drive.google.com/drive/folders/1uwn-WoBZlsVlf9EHno8Wxtu0KCcB42Fp
