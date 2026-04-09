@@ -70,14 +70,15 @@ def get_args():
     return parser.parse_args()
 
 def get_all_paths(model_name: str):
-    """모델 이름에 따른 모든 로컬 경로 반환"""
+    """Return local path as per file type"""
     suffix = model_name.rsplit("_", 1)[-1]
     model_dir = Path("models") / model_name
     return {
         "pt": model_dir / f"best_{suffix}.pt",
         "onnx": model_dir / f"best_{suffix}.onnx",
+        "engine": model_dir / f"best_{suffix}.engine",
         "json": model_dir / f"config_{suffix}.json",
-        "yaml": model_dir / f"yaml_{suffix}.yaml" # YAML은 보통 로컬 생성
+        "yaml": model_dir / f"yaml_{suffix}.yaml" 
     }
 
 def model_checkpoint_paths(model_name: str) -> Tuple[Path, Path]:
@@ -94,7 +95,7 @@ def resolve_model_paths(model_name: str) -> Tuple[Path, Path, Path]:
     return model_dir, config_path, yaml_path
 
 def download_resource(model_name: str, file_type: str, target_path: Path):
-    """공통 다운로드 로직"""
+    """Shared download logic"""
     ids = DRIVE_IDS.get(model_name)
     if not ids or file_type not in ids or ids[file_type] == "1-XXXXX":
         print(f"⚠️ Skip: No valid GDrive ID for {model_name} ({file_type})")
@@ -112,7 +113,7 @@ def download_resource(model_name: str, file_type: str, target_path: Path):
 def run_train(model_name: str, use_drive_weights: bool = False) -> None:
     paths = get_all_paths(model_name)
 
-    # 1. 필수 파일(Config, YAML) 확인 및 자동 다운로드 시도
+    # 1. Config, YAML check and automatic download
     if not paths["json"].exists():
         download_resource(model_name, "json", paths["json"])
     
@@ -122,7 +123,7 @@ def run_train(model_name: str, use_drive_weights: bool = False) -> None:
     # 2. Load Config
     config = load_config(str(paths["json"]))
     
-    # 3. Inject CAF & NWD Loss Patch (기존 로직 유지)
+    # 3. Inject CAF & NWD Loss Patch 
     if model_name in ["model_365", "model_355"]:
         CAFBlock.runtime_alpha = config["caf_alpha"]
         CAFBlock.runtime_dilation_rates = tuple(config["caf_dilation_rates"])
@@ -146,7 +147,7 @@ def run_train(model_name: str, use_drive_weights: bool = False) -> None:
         model = YOLO(str(paths["yaml"]))
         start_weights = "None (Scratch)"
 
-    # 5. Build Training Arguments (기존 로직 유지)
+    # 5. Build Training Arguments
     train_args = {k: v for k, v in config.items() if k not in _TRAIN_SKIP_KEYS}
     train_args.update({
         "data": str(paths["yaml"]),
@@ -164,7 +165,7 @@ def main():
     paths = get_all_paths(args_cli.model_name)
     
     if args_cli.mode == "download":
-        for f_type in ["pt", "onnx", "json"]:
+        for f_type in ["pt", "onnx", "json", "engine"]:
             download_resource(args_cli.model_name, f_type, paths[f_type])
         print(f"✅ All resources for {args_cli.model_name} checked.")
     
